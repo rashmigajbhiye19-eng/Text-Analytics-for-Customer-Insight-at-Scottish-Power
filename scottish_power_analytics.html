@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Text Analytics for Customer Insight – Scottish Power</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Mono:wght@300;400;500&family=Cormorant+Garamond:ital,wght@0,300;0,600;1,300&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0d0f14;
+    --cream: #f5f0e8;
+    --gold: #c9a84c;
+    --gold-light: #e8d08a;
+    --slate: #2a3045;
+    --coral: #d4624a;
+    --teal: #2d7a6e;
+    --muted: #8a8d97;
+    --card-bg: #13161f;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--ink);
+    color: var(--cream);
+    font-family: 'DM Mono', monospace;
+    overflow-x: hidden;
+    cursor: none;
+  }
+
+  /* Custom cursor */
+  .cursor {
+    position: fixed; width: 12px; height: 12px;
+    background: var(--gold); border-radius: 50%;
+    pointer-events: none; z-index: 9999;
+    transform: translate(-50%, -50%);
+    transition: transform 0.1s, width 0.3s, height 0.3s, background 0.3s;
+    mix-blend-mode: difference;
+  }
+  .cursor-ring {
+    position: fixed; width: 36px; height: 36px;
+    border: 1px solid var(--gold-light); border-radius: 50%;
+    pointer-events: none; z-index: 9998;
+    transform: translate(-50%, -50%);
+    transition: transform 0.15s ease-out, opacity 0.3s;
+    opacity: 0.6;
+  }
+
+  /* Noise overlay */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none; z-index: 9990; opacity: 0.4;
+  }
+
+  /* ── NAV ── */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 1.2rem 3rem;
+    border-bottom: 1px solid rgba(201,168,76,0.15);
+    backdrop-filter: blur(20px);
+    background: rgba(13,15,20,0.7);
+  }
+  .nav-logo { font-family: 'Playfair Display', serif; font-size: 1rem; letter-spacing: 0.1em; color: var(--gold); }
+  .nav-links { display: flex; gap: 2rem; }
+  .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; transition: color 0.3s; }
+  .nav-links a:hover { color: var(--gold); }
+
+  /* ── HERO ── */
+  #hero {
+    min-height: 100vh;
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 8rem 3rem 4rem;
+    position: relative; overflow: hidden;
+  }
+  .hero-grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(201,168,76,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(201,168,76,0.04) 1px, transparent 1px);
+    background-size: 60px 60px;
+    animation: gridDrift 20s linear infinite;
+  }
+  @keyframes gridDrift { from { transform: translateY(0); } to { transform: translateY(60px); } }
+
+  .hero-eyebrow {
+    font-size: 0.65rem; letter-spacing: 0.25em; text-transform: uppercase;
+    color: var(--gold); margin-bottom: 1.5rem;
+    opacity: 0; animation: fadeUp 0.8s 0.3s forwards;
+    display: flex; align-items: center; gap: 1rem;
+  }
+  .hero-eyebrow::before { content: ''; display: block; width: 40px; height: 1px; background: var(--gold); }
+
+  .hero-title {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(2.8rem, 6vw, 6.5rem);
+    font-weight: 900; line-height: 1.05;
+    max-width: 900px;
+    opacity: 0; animation: fadeUp 0.9s 0.5s forwards;
+  }
+  .hero-title em { color: var(--gold); font-style: italic; }
+
+  .hero-sub {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: clamp(1rem, 1.8vw, 1.3rem);
+    font-weight: 300; color: var(--muted);
+    max-width: 600px; margin-top: 1.5rem; line-height: 1.7;
+    opacity: 0; animation: fadeUp 0.9s 0.7s forwards;
+  }
+
+  .hero-meta {
+    display: flex; gap: 3rem; margin-top: 3rem;
+    opacity: 0; animation: fadeUp 0.9s 0.9s forwards;
+  }
+  .hero-meta-item { display: flex; flex-direction: column; gap: 0.3rem; }
+  .hero-meta-label { font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); }
+  .hero-meta-value { font-size: 0.85rem; color: var(--cream); }
+
+  .hero-scroll {
+    position: absolute; bottom: 2rem; left: 50%; transform: translateX(-50%);
+    display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
+    font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted);
+    opacity: 0; animation: fadeUp 1s 1.5s forwards;
+  }
+  .scroll-line {
+    width: 1px; height: 40px; background: linear-gradient(to bottom, var(--gold), transparent);
+    animation: scrollPulse 2s ease-in-out infinite;
+  }
+  @keyframes scrollPulse { 0%,100% { opacity: 0.4; transform: scaleY(1); } 50% { opacity: 1; transform: scaleY(1.3); } }
+
+  /* ── STATS BAND ── */
+  #stats {
+    background: var(--slate);
+    padding: 4rem 3rem;
+    display: grid; grid-template-columns: repeat(4,1fr); gap: 2rem;
+    border-top: 1px solid rgba(201,168,76,0.2);
+    border-bottom: 1px solid rgba(201,168,76,0.2);
+  }
+  .stat-item { text-align: center; }
+  .stat-num {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(2rem, 4vw, 3.5rem); font-weight: 700;
+    color: var(--gold); line-height: 1;
+  }
+  .stat-num span { font-size: 0.5em; vertical-align: super; }
+  .stat-label { font-size: 0.65rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); margin-top: 0.5rem; }
+
+  /* ── SECTION COMMON ── */
+  section { padding: 6rem 3rem; }
+  .section-tag {
+    font-size: 0.6rem; letter-spacing: 0.3em; text-transform: uppercase;
+    color: var(--gold); margin-bottom: 1rem;
+    display: flex; align-items: center; gap: 0.8rem;
+  }
+  .section-tag::before { content: ''; width: 30px; height: 1px; background: var(--gold); }
+  .section-title {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(1.8rem, 3.5vw, 3rem); font-weight: 700;
+    margin-bottom: 1rem; line-height: 1.2;
+  }
+  .section-desc {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.15rem; color: var(--muted); max-width: 600px; line-height: 1.8;
+  }
+
+  /* ── SENTIMENT SECTION ── */
+  #sentiment { background: var(--card-bg); }
+  .sentiment-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 4rem; align-items: center; margin-top: 3rem; }
+
+  .pie-wrap { position: relative; width: 280px; height: 280px; margin: 0 auto; }
+  .pie-wrap svg { transform: rotate(-90deg); }
+  .pie-ring {
+    fill: none; stroke-width: 48;
+    stroke-dasharray: 0 283;
+    transition: stroke-dasharray 1.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+  .pie-center {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    text-align: center;
+  }
+  .pie-center-num { font-family: 'Playfair Display', serif; font-size: 2rem; font-weight: 700; color: var(--gold); }
+  .pie-center-label { font-size: 0.6rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); }
+
+  .sentiment-legend { display: flex; flex-direction: column; gap: 1.5rem; }
+  .legend-item { display: flex; align-items: center; gap: 1.2rem; }
+  .legend-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+  .legend-info { flex: 1; }
+  .legend-name { font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cream); }
+  .legend-count { font-family: 'Playfair Display', serif; font-size: 1.5rem; color: var(--muted); }
+  .legend-bar-wrap { height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; margin-top: 0.4rem; overflow: hidden; }
+  .legend-bar { height: 100%; border-radius: 2px; width: 0; transition: width 1.5s ease; }
+
+  /* ── THEMES ── */
+  #themes { }
+  .themes-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 3rem; }
+
+  .theme-card {
+    background: var(--card-bg);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 2px; padding: 2rem;
+    position: relative; overflow: hidden;
+    transition: transform 0.3s, border-color 0.3s;
+  }
+  .theme-card:hover { transform: translateY(-4px); border-color: rgba(201,168,76,0.3); }
+  .theme-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  }
+  .theme-card.positive::before { background: linear-gradient(90deg, var(--teal), var(--gold)); }
+  .theme-card.negative::before { background: linear-gradient(90deg, var(--coral), #a04030); }
+
+  .theme-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
+  .theme-card-title { font-family: 'Playfair Display', serif; font-size: 1.1rem; }
+  .theme-card-badge {
+    font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 0.25rem 0.7rem; border-radius: 20px;
+  }
+  .theme-card.positive .theme-card-badge { background: rgba(45,122,110,0.2); color: #5ec4b3; }
+  .theme-card.negative .theme-card-badge { background: rgba(212,98,74,0.2); color: #e8886e; }
+
+  .bar-list { display: flex; flex-direction: column; gap: 0.9rem; }
+  .bar-item {}
+  .bar-item-top { display: flex; justify-content: space-between; margin-bottom: 0.35rem; }
+  .bar-item-name { font-size: 0.68rem; letter-spacing: 0.05em; color: var(--cream); }
+  .bar-item-val { font-family: 'Playfair Display', serif; font-size: 0.85rem; color: var(--gold); }
+  .bar-track { height: 5px; background: rgba(255,255,255,0.07); border-radius: 3px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 3px; width: 0; transition: width 1.4s ease; }
+  .positive-fill { background: linear-gradient(90deg, var(--teal), var(--gold-light)); }
+  .negative-fill { background: linear-gradient(90deg, var(--coral), #f0a090); }
+
+  /* ── METHODOLOGY ── */
+  #methodology { background: var(--card-bg); }
+  .method-timeline { position: relative; margin-top: 3rem; padding-left: 2rem; }
+  .method-timeline::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+    width: 1px; background: linear-gradient(to bottom, var(--gold), transparent);
+  }
+  .method-step {
+    position: relative; padding: 0 0 3rem 2.5rem;
+    opacity: 0; transform: translateX(-20px);
+    transition: opacity 0.6s, transform 0.6s;
+  }
+  .method-step.visible { opacity: 1; transform: none; }
+  .method-step::before {
+    content: ''; position: absolute; left: -6px; top: 6px;
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--gold); border: 3px solid var(--card-bg);
+    box-shadow: 0 0 0 1px var(--gold);
+  }
+  .method-step-num { font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin-bottom: 0.4rem; }
+  .method-step-title { font-family: 'Playfair Display', serif; font-size: 1.2rem; margin-bottom: 0.5rem; }
+  .method-step-desc { font-size: 0.75rem; color: var(--muted); line-height: 1.7; }
+  .method-tags { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.7rem; }
+  .method-tag {
+    font-size: 0.6rem; letter-spacing: 0.08em;
+    padding: 0.2rem 0.6rem; border: 1px solid rgba(201,168,76,0.3);
+    color: var(--gold); border-radius: 2px;
+  }
+
+  /* ── WORD CLOUD ── */
+  #wordcloud { }
+  .cloud-wrap { margin-top: 3rem; position: relative; padding: 3rem; background: var(--card-bg); border: 1px solid rgba(255,255,255,0.05); }
+  .cloud-word {
+    display: inline-block; padding: 0.2rem 0.5rem; margin: 0.3rem;
+    font-family: 'Playfair Display', serif; transition: color 0.3s, transform 0.3s;
+    cursor: default;
+  }
+  .cloud-word:hover { color: var(--gold) !important; transform: scale(1.15); }
+
+  /* ── RECOMMENDATIONS ── */
+  #recommendations { background: var(--slate); }
+  .rec-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 1.5rem; margin-top: 3rem; }
+  .rec-card {
+    border: 1px solid rgba(201,168,76,0.15); padding: 2rem;
+    position: relative; background: rgba(13,15,20,0.5);
+    transition: background 0.3s, border-color 0.3s;
+    opacity: 0; transform: translateY(30px);
+    transition: opacity 0.6s, transform 0.6s, background 0.3s, border-color 0.3s;
+  }
+  .rec-card.visible { opacity: 1; transform: none; }
+  .rec-card:hover { background: rgba(201,168,76,0.05); border-color: rgba(201,168,76,0.4); }
+  .rec-num {
+    font-family: 'Playfair Display', serif; font-size: 3rem; font-weight: 900;
+    color: rgba(201,168,76,0.12); position: absolute; top: 0.5rem; right: 1rem;
+    line-height: 1;
+  }
+  .rec-icon { font-size: 1.5rem; margin-bottom: 1rem; }
+  .rec-title { font-family: 'Playfair Display', serif; font-size: 1rem; margin-bottom: 0.7rem; color: var(--cream); }
+  .rec-desc { font-size: 0.72rem; color: var(--muted); line-height: 1.7; }
+
+  /* ── CONCLUSION ── */
+  #conclusion { text-align: center; padding: 8rem 3rem; position: relative; overflow: hidden; }
+  #conclusion::before {
+    content: ''; position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%,-50%);
+    width: 600px; height: 600px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(201,168,76,0.06) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .conclusion-quote {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: clamp(1.4rem, 3vw, 2.2rem); font-style: italic;
+    font-weight: 300; line-height: 1.6; max-width: 800px; margin: 0 auto;
+    color: var(--cream);
+  }
+  .conclusion-attr { font-size: 0.65rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin-top: 2rem; }
+
+  /* ── FOOTER ── */
+  footer {
+    background: var(--card-bg); padding: 2rem 3rem;
+    display: flex; justify-content: space-between; align-items: center;
+    border-top: 1px solid rgba(201,168,76,0.1);
+    font-size: 0.65rem; color: var(--muted);
+  }
+
+  /* ── ANIMATIONS ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(30px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .reveal {
+    opacity: 0; transform: translateY(40px);
+    transition: opacity 0.8s ease, transform 0.8s ease;
+  }
+  .reveal.visible { opacity: 1; transform: none; }
+
+  /* ── FLOATING PARTICLES ── */
+  .particle {
+    position: fixed; pointer-events: none; z-index: 0;
+    width: 2px; height: 2px; border-radius: 50%;
+    background: var(--gold); opacity: 0;
+    animation: particleFloat linear infinite;
+  }
+  @keyframes particleFloat {
+    0% { opacity: 0; transform: translateY(0) translateX(0); }
+    10% { opacity: 0.6; }
+    90% { opacity: 0.3; }
+    100% { opacity: 0; transform: translateY(-100vh) translateX(30px); }
+  }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    nav { padding: 1rem 1.5rem; }
+    .nav-links { display: none; }
+    section { padding: 4rem 1.5rem; }
+    #stats { grid-template-columns: repeat(2,1fr); }
+    .sentiment-layout, .themes-grid, .rec-grid { grid-template-columns: 1fr; }
+    .hero-meta { flex-wrap: wrap; gap: 1.5rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="cursor" id="cursor"></div>
+<div class="cursor-ring" id="cursorRing"></div>
+
+<!-- PARTICLES -->
+<div id="particles"></div>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">SP · Text Analytics</div>
+  <div class="nav-links">
+    <a href="#sentiment">Sentiment</a>
+    <a href="#themes">Themes</a>
+    <a href="#methodology">Method</a>
+    <a href="#recommendations">Insights</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section id="hero">
+  <div class="hero-grid"></div>
+  <div class="hero-eyebrow">MSc Business Analytics · Coventry University · 2024</div>
+  <h1 class="hero-title">
+    Leveraging <em>Text Analytics</em><br>for Customer Insight
+  </h1>
+  <p class="hero-sub">A study of market strategy improvement through online reviews and social media feedback — a case study of Scottish Power.</p>
+  <div class="hero-meta">
+    <div class="hero-meta-item">
+      <span class="hero-meta-label">Researcher</span>
+      <span class="hero-meta-value">Rashmi Satish Gajbhiye</span>
+    </div>
+    <div class="hero-meta-item">
+      <span class="hero-meta-label">Supervisor</span>
+      <span class="hero-meta-value">Dr. Umar Farooq</span>
+    </div>
+    <div class="hero-meta-item">
+      <span class="hero-meta-label">Data Source</span>
+      <span class="hero-meta-value">Trustpilot Reviews</span>
+    </div>
+    <div class="hero-meta-item">
+      <span class="hero-meta-label">Tools Used</span>
+      <span class="hero-meta-value">NVivo · Voyant · Octoparse</span>
+    </div>
+  </div>
+  <div class="hero-scroll">
+    <div class="scroll-line"></div>
+    Scroll to explore
+  </div>
+</section>
+
+<!-- STATS -->
+<div id="stats">
+  <div class="stat-item reveal">
+    <div class="stat-num" data-target="2097">0</div>
+    <div class="stat-label">Reviews Analysed</div>
+  </div>
+  <div class="stat-item reveal">
+    <div class="stat-num" data-target="64">0<span>%</span></div>
+    <div class="stat-label">Positive Sentiment</div>
+  </div>
+  <div class="stat-item reveal">
+    <div class="stat-num" data-target="28">0<span>%</span></div>
+    <div class="stat-label">Negative Sentiment</div>
+  </div>
+  <div class="stat-item reveal">
+    <div class="stat-num" data-target="895">0</div>
+    <div class="stat-label">Good Service References</div>
+  </div>
+</div>
+
+<!-- SENTIMENT -->
+<section id="sentiment">
+  <div class="section-tag">Analysis 01</div>
+  <h2 class="section-title reveal">Sentiment Distribution</h2>
+  <p class="section-desc reveal">Across 2,097 Trustpilot reviews, positive feedback significantly dominates — yet the 28% negative segment carries disproportionate weight on customer loyalty and profitability.</p>
+
+  <div class="sentiment-layout">
+    <div class="pie-wrap reveal">
+      <svg viewBox="0 0 100 100" width="280" height="280">
+        <circle cx="50" cy="50" r="45" fill="none" stroke="#1a1d28" stroke-width="48"/>
+        <!-- Positive: 64% = 0.64 * 283 = 181.12 -->
+        <circle class="pie-ring" id="pie-pos" cx="50" cy="50" r="45"
+          stroke="#2d7a6e" stroke-dashoffset="0"/>
+        <!-- Negative: 28% = 79.24, offset by 181.12 -->
+        <circle class="pie-ring" id="pie-neg" cx="50" cy="50" r="45"
+          stroke="#d4624a" stroke-dashoffset="-181"/>
+        <!-- Neutral: 8% = 22.64, offset by 181+79.24=260.36 -->
+        <circle class="pie-ring" id="pie-neu" cx="50" cy="50" r="45"
+          stroke="#c9a84c" stroke-dashoffset="-260"/>
+      </svg>
+      <div class="pie-center">
+        <div class="pie-center-num">64%</div>
+        <div class="pie-center-label">Positive</div>
+      </div>
+    </div>
+
+    <div class="sentiment-legend reveal">
+      <div class="legend-item">
+        <div class="legend-dot" style="background:#2d7a6e;"></div>
+        <div class="legend-info">
+          <div class="legend-name">Positive</div>
+          <div class="legend-count">1,342</div>
+          <div class="legend-bar-wrap"><div class="legend-bar positive-fill" data-width="64" style="background:#2d7a6e;"></div></div>
+        </div>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:#d4624a;"></div>
+        <div class="legend-info">
+          <div class="legend-name">Negative</div>
+          <div class="legend-count">591</div>
+          <div class="legend-bar-wrap"><div class="legend-bar negative-fill" data-width="28" style="background:#d4624a;"></div></div>
+        </div>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:#c9a84c;"></div>
+        <div class="legend-info">
+          <div class="legend-name">Neutral</div>
+          <div class="legend-count">164</div>
+          <div class="legend-bar-wrap"><div class="legend-bar" data-width="8" style="background:#c9a84c;"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- THEMES -->
+<section id="themes">
+  <div class="section-tag">Analysis 02</div>
+  <h2 class="section-title reveal">Thematic Analysis</h2>
+  <p class="section-desc reveal">NVivo-coded themes reveal what customers celebrate — and what drives them away.</p>
+  <div class="themes-grid">
+    <div class="theme-card positive reveal">
+      <div class="theme-card-header">
+        <div class="theme-card-title">Positive Themes</div>
+        <div class="theme-card-badge">Strengths</div>
+      </div>
+      <div class="bar-list">
+        <div class="bar-item">
+          <div class="bar-item-top"><span class="bar-item-name">Good Customer Service</span><span class="bar-item-val">895</span></div>
+          <div class="bar-track"><div class="bar-fill positive-fill" data-width="100"></div></div>
+        </div>
+        <div class="bar-item">
+          <div class="bar-item-top"><span class="bar-item-name">Resolved Issues</span><span class="bar-item-val">158</span></div>
+          <div class="bar-track"><div class="bar-fill positive-fill" data-width="18"></div></div>
+        </div>
+        <div class="bar-item">
+          <div class="bar-item-top"><span class="bar-item-name">Smooth Technical Transition</span><span class="bar-item-val">154</span></div>
+          <div class="bar-track"><div class="bar-fill positive-fill" data-width="17"></div></div>
+        </div>
+        <div class="bar-item">
+          <div class="bar-item-top"><span class="bar-item-name">Smooth Transaction</span><span class="bar-item-val">94</span></div>
+          <div class="bar-track"><div class="bar-fill positive-fill" data-width="10"></div></div>
+        </div>
+        <div class="bar-item">
+          <div class="bar-item-top"><span class="bar-item-name">Affordability</span><span class="bar-item-val">41</span></div>
+          <div class="bar-track"><div class="bar-fill positive-fill" data-width="5"></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="theme-card negative reveal">
+      <div class="theme-card-header">
+        <div class="theme-card-title">Negative Themes</div>
+        <div class="theme-card-badge">Pain Points</div>
+      </div>
+      <div class="bar-list">
+        <div class="bar-item">
+          <div class="bar-item-top"><span class="bar-item-name">Poor Customer Service</span><span class="bar-item-val">437</span></div>
+          <div class="bar-track"><div class="bar-fill negative-fill" data-width="100"></div></div>
+        </div>
+        <div class="bar-item">
+          <div class="bar-item-top"><span class="bar-item-name">Payment Issues</span><span class="bar-item-val">73</span></div>
+          <div class="bar-track"><div class="bar-fill negative-fill" data-width="17"></div></div>
+        </div>
+        <div class="bar-item">
+          <div class="bar-item-top"><span class="bar-item-name">Technical Issues</span><span class="bar-item-val">47</span></div>
+          <div class="bar-track"><div class="bar-fill negative-fill" data-width="11"></div></div>
+        </div>
+        <div class="bar-item">
+          <div class="bar-item-top"><span class="bar-item-name">Unresolved Issues</span><span class="bar-item-val">19</span></div>
+          <div class="bar-track"><div class="bar-fill negative-fill" data-width="4"></div></div>
+        </div>
+        <div class="bar-item">
+          <div class="bar-item-top"><span class="bar-item-name">Overpricing</span><span class="bar-item-val">15</span></div>
+          <div class="bar-track"><div class="bar-fill negative-fill" data-width="3"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- WORD CLOUD -->
+<section id="wordcloud" style="background: var(--card-bg);">
+  <div class="section-tag">Analysis 03</div>
+  <h2 class="section-title reveal">Word Frequency Landscape</h2>
+  <p class="section-desc reveal">The most frequently occurring tokens across all 2,097 reviews — sized by frequency, coloured by sentiment weight.</p>
+  <div class="cloud-wrap reveal" id="cloudWrap"></div>
+</section>
+
+<!-- METHODOLOGY -->
+<section id="methodology">
+  <div class="section-tag">Research Design</div>
+  <h2 class="section-title reveal">Methodology</h2>
+  <p class="section-desc reveal">Guided by the Saunders Research Onion, the study adopts an interpretivist, deductive, qualitative mono-method approach.</p>
+  <div class="method-timeline">
+    <div class="method-step">
+      <div class="method-step-num">Layer 01</div>
+      <div class="method-step-title">Research Philosophy — Interpretivism</div>
+      <div class="method-step-desc">Focuses on subjective experiences and contextual meanings within customer feedback, enabling depth over mere measurement.</div>
+      <div class="method-tags"><span class="method-tag">Interpretivism</span><span class="method-tag">Qualitative</span></div>
+    </div>
+    <div class="method-step">
+      <div class="method-step-num">Layer 02</div>
+      <div class="method-step-title">Research Approach — Deductive</div>
+      <div class="method-step-desc">Pre-established theories on customer sentiment and business outcomes guide the analytical framework, tested against real Trustpilot data.</div>
+      <div class="method-tags"><span class="method-tag">Deductive</span><span class="method-tag">Theory-Testing</span></div>
+    </div>
+    <div class="method-step">
+      <div class="method-step-num">Layer 03</div>
+      <div class="method-step-title">Strategy — Archival Research</div>
+      <div class="method-step-desc">Secondary Trustpilot data scraped via Octoparse. Avoids interviewer bias; captures organic, unsolicited customer expression.</div>
+      <div class="method-tags"><span class="method-tag">Octoparse</span><span class="method-tag">Trustpilot</span><span class="method-tag">Archival</span></div>
+    </div>
+    <div class="method-step">
+      <div class="method-step-num">Layer 04</div>
+      <div class="method-step-title">Data Analysis — NVivo & Voyant</div>
+      <div class="method-step-desc">Thematic coding in NVivo, word frequency & sentiment visualisations in Voyant. Systematic reduction of unstructured text into actionable insight.</div>
+      <div class="method-tags"><span class="method-tag">NVivo</span><span class="method-tag">Voyant</span><span class="method-tag">Thematic Analysis</span><span class="method-tag">Sentiment Analysis</span></div>
+    </div>
+    <div class="method-step">
+      <div class="method-step-num">Layer 05</div>
+      <div class="method-step-title">Time Horizon — Cross-Sectional</div>
+      <div class="method-step-desc">Snapshot of customer attitudes at a specific moment, ideal for evaluating the immediate effectiveness of service and marketing strategies.</div>
+      <div class="method-tags"><span class="method-tag">Cross-Sectional</span><span class="method-tag">Snapshot Analysis</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- RECOMMENDATIONS -->
+<section id="recommendations">
+  <div class="section-tag">Strategic Outcomes</div>
+  <h2 class="section-title reveal">Recommendations</h2>
+  <p class="section-desc reveal">Six data-driven interventions to transform customer feedback into competitive advantage.</p>
+  <div class="rec-grid">
+    <div class="rec-card">
+      <div class="rec-num">01</div>
+      <div class="rec-icon">🎓</div>
+      <div class="rec-title">Customer Service Training</div>
+      <div class="rec-desc">Comprehensive programs targeting interpersonal skills, dispute resolution and empathetic communication to reduce negative service encounters.</div>
+    </div>
+    <div class="rec-card">
+      <div class="rec-num">02</div>
+      <div class="rec-icon">💡</div>
+      <div class="rec-title">Transparent Pricing</div>
+      <div class="rec-desc">Clear billing forms, proactive rate-change notices and itemised cost breakdowns to eliminate overpricing concerns and build trust.</div>
+    </div>
+    <div class="rec-card">
+      <div class="rec-num">03</div>
+      <div class="rec-icon">📊</div>
+      <div class="rec-title">Feedback Culture</div>
+      <div class="rec-desc">Continuous feedback systems using surveys, focus groups and online review monitoring to keep a live pulse on customer sentiment.</div>
+    </div>
+    <div class="rec-card">
+      <div class="rec-num">04</div>
+      <div class="rec-icon">🔮</div>
+      <div class="rec-title">Predictive Analytics</div>
+      <div class="rec-desc">Leverage historical data to anticipate customer needs, personalise communications and proactively prevent dissatisfaction before it escalates.</div>
+    </div>
+    <div class="rec-card">
+      <div class="rec-num">05</div>
+      <div class="rec-icon">⚙️</div>
+      <div class="rec-title">Streamlined Feedback Mechanisms</div>
+      <div class="rec-desc">Automated sentiment analysis and real-time customer experience tools to identify service gaps and respond with agility.</div>
+    </div>
+    <div class="rec-card">
+      <div class="rec-num">06</div>
+      <div class="rec-icon">🛡️</div>
+      <div class="rec-title">Customer Care Initiative</div>
+      <div class="rec-desc">Dedicated resolution teams to handle escalated complaints, converting negative experiences into demonstrations of exceptional service recovery.</div>
+    </div>
+  </div>
+</section>
+
+<!-- CONCLUSION -->
+<section id="conclusion">
+  <div class="section-tag" style="justify-content:center;">Conclusion</div>
+  <blockquote class="conclusion-quote reveal">
+    "By utilising text analytics and structured frameworks, businesses can enhance customer experiences, optimise services, and achieve long-term profitability."
+  </blockquote>
+  <div class="conclusion-attr reveal">Rashmi Satish Gajbhiye · MSc Business Analytics · Coventry University · 2024</div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <span>Text Analytics for Customer Insight — Scottish Power Case Study</span>
+  <span>7053SSL PG Business Project · Supervisor: Dr. Umar Farooq</span>
+</footer>
+
+<script>
+// ── Cursor ──
+const cursor = document.getElementById('cursor');
+const ring = document.getElementById('cursorRing');
+document.addEventListener('mousemove', e => {
+  cursor.style.left = e.clientX + 'px';
+  cursor.style.top = e.clientY + 'px';
+  ring.style.left = e.clientX + 'px';
+  ring.style.top = e.clientY + 'px';
+});
+
+// ── Particles ──
+const pWrap = document.getElementById('particles');
+for (let i = 0; i < 20; i++) {
+  const p = document.createElement('div');
+  p.className = 'particle';
+  p.style.cssText = `
+    left: ${Math.random()*100}vw;
+    bottom: ${-10 + Math.random()*10}px;
+    animation-duration: ${8 + Math.random()*12}s;
+    animation-delay: ${Math.random()*10}s;
+    opacity: ${0.2 + Math.random()*0.5};
+    width: ${1 + Math.random()*3}px;
+    height: ${1 + Math.random()*3}px;
+  `;
+  pWrap.appendChild(p);
+}
+
+// ── Intersection Observer ──
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+    }
+  });
+}, { threshold: 0.15 });
+
+document.querySelectorAll('.reveal, .method-step, .rec-card').forEach(el => observer.observe(el));
+
+// ── Counter animation ──
+function animateCounter(el) {
+  const target = parseInt(el.dataset.target);
+  const hasPct = el.querySelector('span');
+  const suffix = hasPct ? '%' : '';
+  let current = 0;
+  const step = target / 60;
+  const timer = setInterval(() => {
+    current = Math.min(current + step, target);
+    if (hasPct) {
+      el.innerHTML = Math.floor(current) + '<span>%</span>';
+    } else {
+      el.textContent = Math.floor(current).toLocaleString();
+    }
+    if (current >= target) clearInterval(timer);
+  }, 20);
+}
+
+const statsObs = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.querySelectorAll('[data-target]').forEach(animateCounter);
+      statsObs.unobserve(entry.target);
+    }
+  });
+}, { threshold: 0.3 });
+statsObs.observe(document.getElementById('stats'));
+
+// ── Bar animations ──
+const barObs = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.querySelectorAll('.bar-fill').forEach(bar => {
+        setTimeout(() => { bar.style.width = bar.dataset.width + '%'; }, 200);
+      });
+      entry.target.querySelectorAll('.legend-bar').forEach(bar => {
+        setTimeout(() => { bar.style.width = bar.dataset.width + '%'; }, 300);
+      });
+    }
+  });
+}, { threshold: 0.2 });
+document.querySelectorAll('.theme-card, .sentiment-legend').forEach(el => barObs.observe(el));
+
+// ── Pie chart animation ──
+const pieObs = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      setTimeout(() => {
+        document.getElementById('pie-pos').style.strokeDasharray = '181 283';
+        document.getElementById('pie-neg').style.strokeDasharray = '79 283';
+        document.getElementById('pie-neu').style.strokeDasharray = '23 283';
+      }, 300);
+      pieObs.unobserve(entry.target);
+    }
+  });
+}, { threshold: 0.3 });
+pieObs.observe(document.getElementById('sentiment'));
+
+// ── Word Cloud ──
+const words = [
+  { text: 'helpful', size: 3.5, color: '#2d7a6e' },
+  { text: 'service', size: 3.0, color: '#c9a84c' },
+  { text: 'customer', size: 2.8, color: '#5ec4b3' },
+  { text: 'power', size: 2.6, color: '#e8d08a' },
+  { text: 'easy', size: 2.2, color: '#2d7a6e' },
+  { text: 'meter', size: 2.0, color: '#8a8d97' },
+  { text: 'good', size: 2.1, color: '#c9a84c' },
+  { text: 'polite', size: 1.8, color: '#5ec4b3' },
+  { text: 'smart', size: 1.7, color: '#e8d08a' },
+  { text: 'problem', size: 1.9, color: '#d4624a' },
+  { text: 'account', size: 1.7, color: '#8a8d97' },
+  { text: 'phone', size: 1.6, color: '#c9a84c' },
+  { text: 'resolved', size: 1.5, color: '#2d7a6e' },
+  { text: 'billing', size: 1.5, color: '#d4624a' },
+  { text: 'spoke', size: 1.4, color: '#8a8d97' },
+  { text: 'agent', size: 1.4, color: '#5ec4b3' },
+  { text: 'great', size: 1.6, color: '#c9a84c' },
+  { text: 'company', size: 1.3, color: '#8a8d97' },
+  { text: 'explained', size: 1.3, color: '#e8d08a' },
+  { text: 'navigate', size: 1.2, color: '#8a8d97' },
+  { text: 'app', size: 1.4, color: '#2d7a6e' },
+  { text: 'friendly', size: 1.6, color: '#5ec4b3' },
+  { text: 'reading', size: 1.2, color: '#8a8d97' },
+  { text: 'payment', size: 1.3, color: '#d4624a' },
+  { text: 'sorted', size: 1.4, color: '#2d7a6e' },
+];
+const cloudWrap = document.getElementById('cloudWrap');
+words.forEach((w, i) => {
+  const span = document.createElement('span');
+  span.className = 'cloud-word';
+  span.textContent = w.text;
+  span.style.fontSize = w.size + 'rem';
+  span.style.color = w.color;
+  span.style.opacity = 0;
+  span.style.transition = `opacity 0.5s ${i * 0.05}s, color 0.3s, transform 0.3s`;
+  cloudWrap.appendChild(span);
+});
+const cloudObs = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      cloudWrap.querySelectorAll('.cloud-word').forEach(w => { w.style.opacity = 1; });
+      cloudObs.unobserve(entry.target);
+    }
+  });
+}, { threshold: 0.3 });
+cloudObs.observe(cloudWrap);
+
+// ── Stagger rec cards ──
+document.querySelectorAll('.rec-card').forEach((card, i) => {
+  card.style.transitionDelay = (i * 0.1) + 's';
+});
+</script>
+</body>
+</html>
